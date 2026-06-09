@@ -33,12 +33,13 @@ export default function Inventory() {
      load();
    }, [user]);
 
-   const findPharmacy = () => {
+  const findPharmacy = () => {
       setFindingDocs(true);
       setTimeout(() => {
-         toast.success("Đã tìm thấy 3 nhà thuốc gần bạn!");
+         toast.success("Đã tìm thấy nhà thuốc gần bạn!");
          setFindingDocs(false);
-         window.open(`https://www.google.com/maps/search/Nhà+thuốc+gần+đây`, '_blank');
+         // Đường dẫn chuẩn để tự động kích hoạt tìm kiếm "nhà thuốc" trên Google Maps
+         window.open(`https://www.google.com/maps/search/nhà+thuốc`, '_blank');
       }, 1000);
    };
 
