@@ -38,17 +38,17 @@ export default function CameraScan() {
       setCompressing(true);
 
       try {
-        // Cấu hình nén dung lượng ảnh để upload nhanh hơn
+        // CẤU HÌNH MỚI: Ép hẳn xuống 0.35MB (350KB) - Giúp upload nhanh như chớp qua 4G
         const options = {
-          maxSizeMB: 1,
-          maxWidthOrHeight: 1200,
-          useWebWorker: true // Chạy luồng ngầm tránh đơ giao diện
+          maxSizeMB: 0.35,
+          maxWidthOrHeight: 1024, // 1024px là độ phân giải vàng để AI đọc văn bản cực nhanh
+          useWebWorker: true 
         };
         const compressedFile = await imageCompression(file, options);
         setImage(compressedFile);
       } catch (error) {
         console.error("Lỗi nén ảnh:", error);
-        setImage(file); // Nếu lỗi thì dùng ảnh gốc làm phương án dự phòng
+        setImage(file); // Dự phòng nếu lỗi thì dùng ảnh gốc
       } finally {
         setCompressing(false);
       }
@@ -65,12 +65,16 @@ export default function CameraScan() {
 
   // Gửi ảnh lên server xử lý OCR
   const processImage = async () => {
-    if (!image) return;
+    if (!image) {
+      toast.error('Vui lòng đợi ảnh tối ưu xong trong giây lát.');
+      return;
+    }
     setLoading(true);
     try {
       const formData = new FormData();
       formData.append('image', image);
 
+      // Gọi thẳng lên API đã lên đời Gemini của bạn
       const res = await fetch('/api/ocr', {
         method: 'POST',
         body: formData,
@@ -86,7 +90,7 @@ export default function CameraScan() {
     }
   };
 
-  // Lưu danh sách thuốc vào Firestore (Sử dụng Promise.all để lưu song song cực nhanh)
+  // Lưu danh sách thuốc vào Firestore và tự động đóng màn hình khi thành công
   const handleSave = async () => {
     if (!results || !user) return;
     setLoading(true);
@@ -106,10 +110,18 @@ export default function CameraScan() {
       );
 
       await Promise.all(savePromises);
-      toast.success('Đã lưu lịch uống thuốc!');
-      navigate('/');
+      
+      // 1. Hiện thông báo xanh xịn sò báo thành công rực rỡ
+      toast.success('🎉 Đã tạo lịch nhắc uống thuốc thành công!');
+      
+      // 2. Chờ hiệu ứng chạy trong 1 giây (1000ms) để người dùng kịp đọc, rồi tự động thoát hẳn
+      setTimeout(() => {
+        handleClear(); // Tự động xóa ảnh preview và reset trạng thái kết quả cũ
+        navigate('/'); // Điều hướng thoát màn hình upload để quay về trang chủ
+      }, 1000);
+
     } catch (error) {
-      toast.error('Không thể lưu dữ liệu.');
+      toast.error('Không thể lưu dữ liệu lịch nhắc.');
       console.error(error);
     } finally {
       setLoading(false);
@@ -133,7 +145,6 @@ export default function CameraScan() {
       {/* Vùng nội dung chính */}
       <div className="flex-1 w-full flex items-center justify-center overflow-y-auto px-4 pb-32">
         {!preview ? (
-          /* GIAO DIỆN KHI CHƯA CHỌN ẢNH: Hiển thị hộp tải ảnh & Nút chụp */
           <div className="w-full max-w-sm text-center space-y-6 px-4">
             <div 
               onClick={() => fileInputRef.current?.click()}
@@ -163,7 +174,6 @@ export default function CameraScan() {
             </button>
           </div>
         ) : (
-          /* GIAO DIỆN KHI ĐÃ CÓ ẢNH PREVIEW */
           <div className="w-full max-w-md flex flex-col items-center gap-5 py-4">
             <div className="relative rounded-2xl overflow-hidden border border-white/10 shadow-2xl bg-gray-900/50">
               <img src={preview} alt="Preview" className="max-h-[35vh] w-auto object-contain mx-auto" />
@@ -174,7 +184,6 @@ export default function CameraScan() {
               )}
             </div>
             
-            {/* Hiển thị danh sách kết quả trả về từ AI OCR */}
             {results && (
               <div className="w-full bg-white rounded-2xl p-4 shadow-xl space-y-3">
                 <h3 className="font-semibold text-gray-800 border-b pb-2 text-sm">Kết quả phân tích</h3>
@@ -196,7 +205,7 @@ export default function CameraScan() {
         )}
       </div>
 
-      {/* Thanh công cụ / Nút hành động cố định ở đáy màn hình */}
+      {/* Thanh công cụ cố định ở đáy màn hình */}
       <div className="fixed bottom-0 left-0 right-0 p-6 pb-safe bg-gradient-to-t from-black via-black/90 to-transparent flex justify-center items-center z-20">
         <input 
           type="file" 
@@ -210,7 +219,7 @@ export default function CameraScan() {
           <button 
             onClick={!results ? processImage : handleSave}
             disabled={loading || compressing}
-            className={`w-full max-w-sm font-medium py-3.5 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 text-white shadow-lg transform active:scale-98 disabled:opacity-50 disabled:pointer-events-none ${
+            className={`w-full max-w-sm font-medium py-3.5 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 text-white shadow-lg transform active:scale-98 disabled:opacity-40 disabled:pointer-events-none ${
               !results 
                 ? "bg-blue-600 hover:bg-blue-700 shadow-blue-900/30" 
                 : "bg-green-600 hover:bg-green-700 shadow-green-900/30"
@@ -218,7 +227,7 @@ export default function CameraScan() {
           >
             {loading && <Loader2 className="animate-spin size-5" />}
             {!results 
-              ? (loading ? "Đang xử lý bằng AI..." : "Phân tích đơn thuốc") 
+              ? (loading ? "Đang xử lý bằng AI..." : (compressing ? "Đang chuẩn bị ảnh..." : "Phân tích đơn thuốc")) 
               : (loading ? "Đang tạo lịch..." : "Tạo lịch uống thuốc")
             }
           </button>
