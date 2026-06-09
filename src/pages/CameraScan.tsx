@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Camera, X, UploadCloud, ChevronLeft, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
-import { collection, doc, writeBatch, serverTimestamp } from 'firebase/firestore'; // Thay đổi addDoc thành doc, writeBatch để tối ưu
+import { collection, doc, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useStore } from '../store';
 import imageCompression from 'browser-image-compression';
@@ -31,24 +31,22 @@ export default function CameraScan() {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       
-      // Tạo nhanh ảnh preview để người dùng thấy ngay lập tức
       if (preview) URL.revokeObjectURL(preview);
       setPreview(URL.createObjectURL(file));
       setResults(null);
       setCompressing(true);
 
       try {
-        // Cấu hình nén dung lượng ảnh để upload nhanh hơn
         const options = {
           maxSizeMB: 1,
           maxWidthOrHeight: 1200,
-          useWebWorker: true // Chạy luồng ngầm tránh đơ giao diện
+          useWebWorker: true 
         };
         const compressedFile = await imageCompression(file, options);
         setImage(compressedFile);
       } catch (error) {
         console.error("Lỗi nén ảnh:", error);
-        setImage(file); // Nếu lỗi thì dùng ảnh gốc làm phương án dự phòng
+        setImage(file); 
       } finally {
         setCompressing(false);
       }
@@ -63,7 +61,7 @@ export default function CameraScan() {
     setResults(null);
   };
 
-  // Gửi ảnh lên server xử lý OCR -> TỰ ĐỘNG THỰC HIỆN LƯU VÀ THOÁT RA KHI XONG
+  // QUY TRÌNH 1-CHẠM: Tự động trích xuất -> Tự động lưu Firebase -> Thông báo -> Tự thoát
   const processImage = async () => {
     if (!image) return;
     if (!user) {
@@ -81,12 +79,18 @@ export default function CameraScan() {
         method: 'POST',
         body: formData,
       });
-      if (!res.ok) throw new Error('Failed to process image');
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.details || 'Failed to process image');
+      }
+      
       const data = await res.json();
-      setResults(data);
 
-      // 2. Kiểm tra nếu có dữ liệu thuốc trả về, tự động kích hoạt lưu luôn
+      // 2. Nếu tìm thấy dữ liệu thuốc, tiến hành lưu hàng loạt (Batch) vào Firestore
       if (data && data.length > 0) {
+        setResults(data); // Cập nhật state để UI hiển thị kết quả trực quan lúc đang lưu
+        
         const batch = writeBatch(db);
         
         data.forEach((rx: any) => {
@@ -104,13 +108,12 @@ export default function CameraScan() {
           });
         });
 
-        // Tiến hành ghi dữ liệu vào Firebase
         await batch.commit();
 
-        // 3. Hiển thị thông báo thành công rực rỡ
-        toast.success(`🎉 Đã trích xuất dữ liệu và tạo lịch thành công!`);
+        // 3. Thông báo thành công rực rỡ
+        toast.success(`🎉 Trích xuất và tạo lịch uống thuốc thành công!`);
 
-        // 4. Chờ đúng 1 giây để người dùng đọc thông báo rồi tự động out ra màn hình chính
+        // 4. Chờ đúng 1 giây để kịp đọc thông báo rồi tự out ra Home
         setTimeout(() => {
           handleClear();
           navigate('/');
@@ -118,11 +121,27 @@ export default function CameraScan() {
         
       } else {
         toast.error('AI không tìm thấy thông tin thuốc hợp lệ trong đơn ảnh.');
+        setTimeout(() => {
+          handleClear();
+          navigate('/');
+        }, 2000);
       }
 
-    } catch (error) {
-      toast.error('Có lỗi xảy ra khi quét đơn thuốc.');
+    } catch (error: any) {
       console.error(error);
+      
+      // Xử lý an toàn: Nếu lỗi 503 (AI quá tải), thông báo rõ ràng cho người dùng biết
+      if (error.message && error.message.includes("503")) {
+        toast.error('🤖 Máy chủ AI đang quá tải (Lỗi 503). Đang tự động quay về trang chủ...');
+      } else {
+        toast.error('Có lỗi xảy ra khi xử lý đơn thuốc. Đang quay về trang chủ...');
+      }
+
+      // Kể cả lỗi vẫn tự out về màn hình chính sau 2 giây để tránh kẹt giao diện camera
+      setTimeout(() => {
+        handleClear();
+        navigate('/');
+      }, 2000);
     } finally {
       setLoading(false);
     }
@@ -145,7 +164,7 @@ export default function CameraScan() {
       {/* Vùng nội dung chính */}
       <div className="flex-1 w-full flex items-center justify-center overflow-y-auto px-4 pb-32">
         {!preview ? (
-          /* GIAO DIỆN KHI CHƯA CHỌN ẢNH: Hiển thị hộp tải ảnh & Nút chụp */
+          /* GIAO DIỆN KHI CHƯA CHỌN ẢNH */
           <div className="w-full max-w-sm text-center space-y-6 px-4">
             <div 
               onClick={() => fileInputRef.current?.click()}
@@ -186,19 +205,19 @@ export default function CameraScan() {
               )}
             </div>
             
-            {/* Hiển thị danh sách kết quả trả về từ AI OCR */}
+            {/* Danh sách thuốc hiển thị nhanh lúc hệ thống đang thực hiện lưu */}
             {results && (
               <div className="w-full bg-white rounded-2xl p-4 shadow-xl space-y-3">
-                <h3 className="font-semibold text-gray-800 border-b pb-2 text-sm">Kết quả phân tích</h3>
+                <h3 className="font-semibold text-gray-800 border-b pb-2 text-sm">Kết quả trích xuất</h3>
                 <div className="space-y-2 max-h-[30vh] overflow-y-auto pr-1">
                   {results.map((rx, i) => (
-                    <div key={i} className="bg-gray-50 rounded-xl p-3 border border-gray-100 flex flex-col gap-1.5">
-                      <input className="font-medium text-blue-600 bg-transparent border-none outline-none w-full text-sm" defaultValue={rx.name} />
-                      <div className="flex gap-2">
-                        <input className="text-xs bg-white border border-gray-200 px-2 py-1.5 rounded w-1/3" defaultValue={rx.dosage} />
-                        <input className="text-xs bg-white border border-gray-200 px-2 py-1.5 rounded w-2/3" defaultValue={rx.times?.join(", ")} />
+                    <div key={i} className="bg-gray-50 rounded-xl p-3 border border-gray-100 flex flex-col gap-1.5 opacity-70">
+                      <div className="font-medium text-blue-600 text-sm">{rx.name || "Tên thuốc"}</div>
+                      <div className="flex gap-2 text-xs text-gray-700">
+                        <span className="bg-white border border-gray-200 px-2 py-1 rounded">{rx.dosage || "Liều lượng"}</span>
+                        <span className="bg-white border border-gray-200 px-2 py-1 rounded flex-1">{rx.times?.join(", ") || "Giờ uống"}</span>
                       </div>
-                      <input className="text-xs text-gray-500 bg-transparent border-none outline-none w-full mt-0.5" defaultValue={rx.instructions} />
+                      <div className="text-xs text-gray-400 mt-0.5">{rx.instructions || "Không có hướng dẫn"}</div>
                     </div>
                   ))}
                 </div>
@@ -208,7 +227,7 @@ export default function CameraScan() {
         )}
       </div>
 
-      {/* Thanh công cụ / Nút hành động cố định ở đáy màn hình */}
+      {/* Thanh công cụ nút bấm cố định dưới đáy */}
       <div className="fixed bottom-0 left-0 right-0 p-6 pb-safe bg-gradient-to-t from-black via-black/90 to-transparent flex justify-center items-center z-20">
         <input 
           type="file" 
@@ -225,7 +244,7 @@ export default function CameraScan() {
             className="w-full max-w-sm font-medium py-3.5 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 text-white shadow-lg transform active:scale-98 disabled:opacity-50 disabled:pointer-events-none bg-blue-600 hover:bg-blue-700 shadow-blue-900/30"
           >
             {loading && <Loader2 className="animate-spin size-5" />}
-            {loading ? "Đang xử lý bằng AI & Tạo lịch..." : "Phân tích đơn thuốc"}
+            {loading ? "Đang phân tích & Lưu lịch..." : "Phân tích đơn thuốc"}
           </button>
         )}
       </div>
