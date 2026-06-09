@@ -68,7 +68,7 @@ Provide a direct, helpful, and concise answer. Include this disclaimer at the bo
     `;
 
     const chat = ai.chats.create({
-      model: "gemini-2.0-flash",
+      model: "gemini-1.5-flash",
       config: {
         systemInstruction: "You are a concise virtual medical assistant helping users manage their medications safely.",
       }
