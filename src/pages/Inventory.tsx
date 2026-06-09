@@ -3,7 +3,6 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useStore } from '../store';
 import { Package, Search, MapPin } from 'lucide-react';
-import { toast } from 'sonner';
 
 interface InventoryItem {
    id: string;
@@ -15,33 +14,22 @@ export default function Inventory() {
    const { user } = useStore();
    const [items, setItems] = useState<InventoryItem[]>([]);
    const [loading, setLoading] = useState(true);
-   const [findingDocs, setFindingDocs] = useState(false);
 
    useEffect(() => {
-     if (!user) return;
-     const load = async () => {
-        try {
-           const q = query(collection(db, 'inventory'), where('userId', '==', user.uid));
-           const snaps = await getDocs(q);
-           setItems(snaps.docs.map(d => ({ id: d.id, ...d.data() } as InventoryItem)));
-        } catch (error) {
-           console.error(error);
-        } finally {
-           setLoading(false);
-        }
-     };
-     load();
+      if (!user) return;
+      const load = async () => {
+         try {
+            const q = query(collection(db, 'inventory'), where('userId', '==', user.uid));
+            const snaps = await getDocs(q);
+            setItems(snaps.docs.map(d => ({ id: d.id, ...d.data() } as InventoryItem)));
+         } catch (error) {
+            console.error(error);
+         } finally {
+            setLoading(false);
+         }
+      };
+      load();
    }, [user]);
-
-  const findPharmacy = () => {
-      setFindingDocs(true);
-      setTimeout(() => {
-         toast.success("Đã tìm thấy nhà thuốc gần bạn!");
-         setFindingDocs(false);
-         // Đường dẫn chuẩn để tự động kích hoạt tìm kiếm "nhà thuốc" trên Google Maps
-         window.open(`https://www.google.com/maps/search/nhà+thuốc`, '_blank');
-      }, 1000);
-   };
 
    return (
       <div className="p-6 pt-12 pb-24">
@@ -85,19 +73,23 @@ export default function Inventory() {
             </div>
          )}
 
-         {/* Smart O2O warning box */}
+         {/* Hộp gợi ý tìm nhà thuốc */}
          <div className="mt-8 bg-blue-50 rounded-2xl p-5 border border-blue-100">
             <h3 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
                <MapPin size={18} /> Mua thêm thuốc?
             </h3>
             <p className="text-sm text-blue-800/80 mb-4">Gợi ý các nhà thuốc gần khu vực hiện tại của bạn.</p>
-            <button 
-               onClick={findPharmacy}
-               disabled={findingDocs}
-               className="w-full bg-white text-blue-600 border border-blue-200 font-medium py-3 rounded-xl shadow-sm active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+            
+            {/* THAY ĐỔI Ở ĐÂY: Dùng thẻ <a> trực tiếp với link dạng Universal kết hợp geo để điện thoại tự bắt bài mở app */}
+            <a 
+               href="https://www.google.com/maps/search/?api=1&query=nhà+thuốc"
+               target="_blank"
+               rel="noopener noreferrer"
+               className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-xl shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2 text-center text-sm"
             >
-               {findingDocs ? "Đang tìm..." : "Tìm nhà thuốc quanh đây"}
-            </button>
+               <MapPin size={16} />
+               Tìm nhà thuốc quanh đây
+            </a>
          </div>
       </div>
    );
