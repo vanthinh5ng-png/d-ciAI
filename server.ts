@@ -13,7 +13,7 @@ async function startServer() {
   app.use(express.json());
 
   const ai = new GoogleGenAI({
-    apiKey: process.env.VITE_GEMINI_API_KEY,
+    apiKey: process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY,
     httpOptions: {
       headers: {
         'User-Agent': 'aistudio-build',
