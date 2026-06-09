@@ -1,5 +1,5 @@
 import express from "express";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import multer from "multer";
 
 const app = express();
@@ -20,28 +20,38 @@ app.post("/api/ocr", upload.single("image"), async (req, res) => {
     const mimeType = req.file.mimetype;
     const base64Data = req.file.buffer.toString("base64");
 
+    // Đổi sang "gemini-2.5-flash" để sửa triệt để lỗi 404 trên v1beta
     const response = await ai.models.generateContent({
-      model: "gemini-1.5-flash",
+      model: "gemini-2.5-flash",
       contents: [
         { inlineData: { mimeType, data: base64Data } },
-        { text: `Analyze this prescription image and return JSON. 
-Extract the following fields and format as a JSON array of objects, with each object containing:
-- name (string): Name of the medicine
-- dosage (string): Dosage amount (e.g., "1 viên", "10ml")
-- times (array of strings): Times to take it, e.g., ["Sáng"], ["Trưa", "Tối"]
-- instructions (string): Any remarks, like "Sau ăn", "Trước ăn"
-
-Do not wrap in markdown tags, return raw JSON array.` }
+        { text: "Analyze this prescription image and extract the medicine fields accurately according to the requested structure." }
       ],
       config: {
+        // Ép định dạng đầu ra là JSON sạch
         responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              name: { type: Type.STRING, description: "Name of the medicine" },
+              dosage: { type: Type.STRING, description: "Dosage amount (e.g., '1 viên', '10ml')" },
+              times: { 
+                type: Type.ARRAY, 
+                items: { type: Type.STRING }, 
+                description: "Times to take it, e.g., ['Sáng'], ['Trưa', 'Tối']" 
+              },
+              instructions: { type: Type.STRING, description: "Any remarks, like 'Sau ăn', 'Trước ăn'" }
+            },
+            required: ["name", "dosage", "times", "instructions"]
+          }
+        }
       }
     });
 
-    const textOutput = response.text || "";
-    const cleanJson = textOutput.replace(/^```json\s*/i, "").replace(/```$/, "").trim();
-    
-    res.json(JSON.parse(cleanJson));
+    const textOutput = response.text || "[]";
+    res.json(JSON.parse(textOutput));
   } catch (error: any) {
     console.error("Vercel OCR Error:", error);
     res.status(500).json({ 
@@ -67,14 +77,15 @@ Provide a direct, helpful, and concise answer. Include this disclaimer at the bo
 "AI chỉ mang tính chất hỗ trợ thông tin, vui lòng tuân thủ tuyệt đối chỉ định của bác sĩ."
     `;
 
-    const chat = ai.chats.create({
-      model: "gemini-1.5-flash",
+    // Đồng bộ sang dòng "gemini-2.5-flash" cho đồng nhất
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
       config: {
         systemInstruction: "You are a concise virtual medical assistant helping users manage their medications safely.",
       }
     });
 
-    const response = await chat.sendMessage({ message: prompt });
     res.json({ text: response.text });
   } catch (error: any) {
     console.error("Chat error:", error);
@@ -82,7 +93,7 @@ Provide a direct, helpful, and concise answer. Include this disclaimer at the bo
   }
 });
 
-// Chạy server độc lập hoàn toàn khi ở môi trường Local (Không import Vite vào đây)
+// Chạy server độc lập hoàn toàn khi ở môi trường Local
 if (process.env.NODE_ENV !== "production") {
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => {
@@ -90,5 +101,4 @@ if (process.env.NODE_ENV !== "production") {
   });
 }
 
-// Xuất bản cho Vercel Node.js Handler nhận diện
 export default app;
