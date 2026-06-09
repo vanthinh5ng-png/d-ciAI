@@ -1,0 +1,6 @@
+{
+  "name": "MediSync",
+  "description": "SmartPill Web Application Mobile-First PWA using Gemini AI for OCR and Chatbot",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
